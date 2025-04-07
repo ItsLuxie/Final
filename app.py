@@ -4,11 +4,8 @@ from streamlit_option_menu import option_menu
 import pandas as pd
 import datetime
 from sklearn.metrics.pairwise import linear_kernel
-from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
-from PIL import Image
-from io import BytesIO
+from sklearn.feature_extraction.text import TfidfVectorizer
 import altair as alt
-from datetime import date
 import base64
 import pickle
 from pathlib import Path
@@ -17,12 +14,27 @@ import tweepy
 from textblob import TextBlob  # For sentiment analysis
 import re
 
-import asyncio
+# Read credentials from db
+def load_users_and_passwords(filenames=["auth/users.txt", "auth/password.txt"]):
+    users = []
+    passwords = []
+
+    with open(filenames[0], "r", encoding="utf-8") as file:
+        users.extend([line.strip() for line in file.readlines()])
+
+    with open(filenames[1], "r", encoding="utf-8") as file:
+        passwords.extend([line.strip() for line in file.readlines()])
+
+    return users, passwords
 
 # Define user credentials
-names = ["Lucy"]
-usernames = ["Lucy"]
-passwords = ["password1", "password2"]  # Replace with your actual passwords
+# names = ["Lucy"]
+# usernames = ["Lucy"]
+# passwords = ["password1", "password2"]  # Replace with your actual passwords
+
+# Define credentials stored in db
+usernames, passwords = load_users_and_passwords()
+names = usernames
 
 # Hash the passwords
 # hashed_passwords = stauth.Hasher(passwords).generate()
@@ -32,14 +44,24 @@ passwords = ["password1", "password2"]  # Replace with your actual passwords
 hashed_passwords = [stauth.Hasher().hash(password) for password in passwords]
 
 # Create the credentials dictionary
+# this only adds the first user
+# credentials = {
+#     "usernames": {
+#         usernames[0]: {
+#             "name": names[0],
+#             "password": hashed_passwords[0]
+#         }
+#     }
+# }
+
+# Adding all credentials loaded
 credentials = {
-    "usernames": {
-        usernames[0]: {
-            "name": names[0],
-            "password": hashed_passwords[0]
-        }
-    }
+    "usernames": {}
 }
+
+for key, username in enumerate(usernames):
+    new_user = {username: {"name": names[key],"password": hashed_passwords[key]}}
+    credentials["usernames"].update(new_user)
 
 # Save the credentials to a pickle file
 file_path = "hashed_pw.pkl"
@@ -115,6 +137,14 @@ df = pd.concat([d1, d2, d3, d4, d5], axis=0, ignore_index=True)
 df.dropna(subset=['tweet_clean'], inplace=True)
 df['time'] = pd.to_datetime(df['time']).dt.normalize()
 
+# Read tweets from a text file
+def load_tweets_from_file(filenames=["fetched_tweets_1.txt", "fetched_tweets_2.txt"]):
+    tweets = []
+    for filename in filenames:
+        with open(filename, "r", encoding="utf-8") as file:
+            tweets.extend([line.strip() for line in file.readlines()])
+    return tweets
+
 # Define current date
 current_date = datetime.datetime.now().date()
 
@@ -123,9 +153,11 @@ set_bg("background.png")
 
 # Sidebar navigation
 with st.sidebar:
-    navigation = option_menu(None, ["Home", "Politics Today", "Presidential Election Prediction"],
-                             icons=['house-fill', "book-half", "check-circle-fill"], default_index=1)
-
+    navigation = option_menu(None, ["Home", "Politics Today", "Presidential Election Prediction", "Register"],
+                             icons=['house-fill', "book-half", "check-circle-fill", "person-plus-fill"], default_index=1)
+# Initialize navigation state
+if "navigation" not in st.session_state:
+    st.session_state["navigation"] = "Home"
 # Home Section
 if navigation == "Home":
     st.markdown("<h2 style='text-align: center; color: white;'>The Indispensables Election Analysis</h2>", unsafe_allow_html=True)
@@ -143,14 +175,6 @@ if navigation == "Home":
                     """, unsafe_allow_html=True)
     with col2:
         st.image("b.png")
-
-# Read tweets from a text file
-def load_tweets_from_file(filenames=["fetched_tweets_1.txt", "fetched_tweets_2.txt"]):
-    tweets = []
-    for filename in filenames:
-        with open(filename, "r", encoding="utf-8") as file:
-            tweets.extend([line.strip() for line in file.readlines()])
-    return tweets
 
 # Politics Today Section
 if navigation == "Politics Today":
@@ -366,3 +390,22 @@ if navigation == "Presidential Election Prediction":
         st.error('Username/password is incorrect')
     elif st.session_state.get('authentication_status') is None:
         st.warning('Please enter your username and password')
+
+# Register Section
+if navigation == "Register":
+    st.subheader("Register a New User")
+    
+    # Input fields for username and password
+    new_username = st.text_input("Enter a username")
+    new_password = st.text_input("Enter a password", type="password")
+    
+    if st.button("Register"):
+        if new_username and new_password:
+            # Save the username and password to a text file
+            with open("auth/users.txt", "a") as file:
+                file.write(f"\n{new_username}")
+            with open("auth/password.txt", "a") as file:
+                file.write(f"\n{new_password}")
+            st.success("User registered successfully!")
+        else:
+            st.error("Please fill in both username and password.")
